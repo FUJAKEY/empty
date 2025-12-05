@@ -86,7 +86,10 @@ public class FakeBot {
                 ClientConnection.connect(socketAddress, false, this.connection);
 
                 BotLoginListener loginListener = new BotLoginListener(this.connection, this);
-                setListener(this.connection, loginListener);
+
+                // Get LOGIN protocol state
+                Object loginState = getProtocolState("LoginStates", "C2S");
+                setListener(this.connection, loginState, loginListener);
 
                 this.connection.send(new HandshakeC2SPacket(767, ip, port, ConnectionIntent.LOGIN));
                 this.connection.send(new LoginHelloC2SPacket(this.name, UUID.randomUUID()));
@@ -109,13 +112,36 @@ public class FakeBot {
         }).start();
     }
 
-    private void setListener(ClientConnection conn, Object listener) {
+    // Dynamically retrieve ProtocolInfo (LoginStates.C2S, etc.)
+    private Object getProtocolState(String className, String fieldName) {
         try {
+            // Try standard Fabric/Intermediary location: net.minecraft.network.state.LoginStates
+            Class<?> cls = Class.forName("net.minecraft.network.state." + className);
+            return cls.getField(fieldName).get(null);
+        } catch (Exception e) {
+            // e.printStackTrace();
+            return null; // Fallback to null if not found (will likely crash if method requires it)
+        }
+    }
+
+    private void setListener(ClientConnection conn, Object state, Object listener) {
+        try {
+             // Find method taking (ProtocolInfo/NetworkState, PacketListener)
              for (java.lang.reflect.Method m : ClientConnection.class.getDeclaredMethods()) {
                  if (m.getParameterCount() == 2 &&
                      net.minecraft.network.listener.PacketListener.class.isAssignableFrom(m.getParameterTypes()[1])) {
+
                      m.setAccessible(true);
-                     m.invoke(conn, null, listener);
+                     // If method takes NetworkPhase, pass that instead of state object
+                     if (m.getParameterTypes()[0] == NetworkPhase.class) {
+                         if (state != null && state.toString().contains("LOGIN")) m.invoke(conn, NetworkPhase.LOGIN, listener);
+                         else if (state != null && state.toString().contains("CONFIG")) m.invoke(conn, NetworkPhase.CONFIGURATION, listener);
+                         else if (state != null && state.toString().contains("PLAY")) m.invoke(conn, NetworkPhase.PLAY, listener);
+                         else m.invoke(conn, NetworkPhase.LOGIN, listener); // Default?
+                     } else {
+                         // Expects ProtocolInfo
+                         m.invoke(conn, state, listener);
+                     }
                      return;
                  }
              }
@@ -145,7 +171,8 @@ public class FakeBot {
         @Override
         public void onSuccess(LoginSuccessS2CPacket packet) {
             BotConfigListener configListener = new BotConfigListener(connection, bot);
-            bot.setListener(connection, configListener);
+            Object configState = bot.getProtocolState("ConfigurationStates", "C2S");
+            bot.setListener(connection, configState, configListener);
         }
 
         @Override public void onDisconnect(LoginDisconnectS2CPacket packet) { bot.connected = false; }
@@ -175,24 +202,6 @@ public class FakeBot {
 
         @Override
         public void onReady(net.minecraft.network.packet.s2c.config.ReadyS2CPacket packet) {
-             // Send Client Settings
-             // Use ChatVisibility Enum ordinal if enum class not found via import
-             try {
-                 Class<?> visibilityClass = Class.forName("net.minecraft.client.option.ChatVisibility");
-                 Object visibility = Enum.valueOf((Class<Enum>)visibilityClass, "SYSTEM");
-
-                 // Use constructor with Object arguments if type matching fails, but SyncedClientOptions constructor expects specific types.
-                 // We will skip sending ClientOptions if we can't type check safely, to avoid build error.
-                 // OR better: use reflection to invoke the constructor!
-
-                 java.lang.reflect.Constructor<?> ctor = SyncedClientOptions.class.getConstructors()[0]; // Assuming only one or we take first
-                 // This is risky but likely to work if parameters match.
-                 // Actually SyncedClientOptions is a record.
-
-             } catch (Throwable t) {
-                // If the cast fails (inner class issue?), just ignore.
-             }
-
              try {
                 java.lang.reflect.Constructor<ReadyC2SPacket> c = ReadyC2SPacket.class.getDeclaredConstructor();
                 c.setAccessible(true);
@@ -207,8 +216,6 @@ public class FakeBot {
                 new Class<?>[]{ClientPlayPacketListener.class},
                 (proxy, method, args) -> {
                     String name = method.getName();
-                    // Robust check: Check argument type instead of just name for KeepAlive and Ping
-                    // because names might be obfuscated in production.
                     if (args != null && args.length > 0) {
                         if (args[0] instanceof KeepAliveS2CPacket) {
                             connection.send(new KeepAliveC2SPacket(((KeepAliveS2CPacket)args[0]).getId()));
@@ -218,7 +225,6 @@ public class FakeBot {
                             return null;
                         }
                     }
-
                     if (name.equals("isConnectionOpen")) {
                         return connection.isOpen();
                     } else if (name.equals("getPhase")) {
@@ -230,7 +236,8 @@ public class FakeBot {
                 }
              );
 
-             bot.setListener(connection, playListener);
+             Object playState = bot.getProtocolState("PlayStates", "C2S");
+             bot.setListener(connection, playState, playListener);
         }
 
         @Override public void onPacketException(Packet packet, Exception exception) {}
