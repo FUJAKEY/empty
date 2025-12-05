@@ -51,7 +51,7 @@ import java.lang.reflect.Proxy;
 import java.util.Collections;
 import net.minecraft.network.state.LoginStates;
 import net.minecraft.network.state.ConfigurationStates;
-// import net.minecraft.network.state.PlayStates; // Failed to resolve
+// import net.minecraft.network.state.PlayStates; // Removed
 
 public class FakeBot {
     private final String name;
@@ -94,7 +94,8 @@ public class FakeBot {
 
                 BotLoginListener loginListener = new BotLoginListener(this.connection, this);
 
-                setListener(this.connection, LoginStates.C2S, loginListener);
+                // Use LoginStates.S2C directly as it is available.
+                setListener(this.connection, LoginStates.S2C, loginListener);
 
                 this.connection.send(new HandshakeC2SPacket(767, ip, port, ConnectionIntent.LOGIN));
                 this.connection.send(new LoginHelloC2SPacket(this.name, UUID.randomUUID()));
@@ -120,21 +121,26 @@ public class FakeBot {
     private void setListener(ClientConnection conn, Object state, Object listener) {
         try {
              // Find method taking (ProtocolInfo/NetworkState, PacketListener)
+             // or (NetworkPhase, PacketListener) as fallback
              for (java.lang.reflect.Method m : ClientConnection.class.getDeclaredMethods()) {
-                 if (m.getParameterCount() == 2 &&
-                     net.minecraft.network.listener.PacketListener.class.isAssignableFrom(m.getParameterTypes()[1])) {
+                 if (m.getParameterCount() != 2) continue;
 
-                     m.setAccessible(true);
-                     if (m.getParameterTypes()[0] == NetworkPhase.class) {
-                         // Fallback for Phase
-                         if (state instanceof NetworkPhase) m.invoke(conn, state, listener);
-                         else if (state == LoginStates.C2S) m.invoke(conn, NetworkPhase.LOGIN, listener);
-                         else if (state == ConfigurationStates.C2S) m.invoke(conn, NetworkPhase.CONFIGURATION, listener);
-                         else m.invoke(conn, NetworkPhase.PLAY, listener);
-                     } else {
-                         // Expects ProtocolInfo
-                         m.invoke(conn, state, listener);
-                     }
+                 Class<?>[] types = m.getParameterTypes();
+
+                 // Check if 2nd arg is PacketListener
+                 if (!net.minecraft.network.listener.PacketListener.class.isAssignableFrom(types[1])) continue;
+
+                 m.setAccessible(true);
+
+                 if (state != null && types[0].isAssignableFrom(state.getClass())) {
+                     // Direct match
+                     m.invoke(conn, state, listener);
+                     return;
+                 } else if (types[0] == NetworkPhase.class) {
+                     // Fallback to Phase Enum if ProtocolInfo match fails or state is null (PlayStates case)
+                     if (state == LoginStates.S2C) m.invoke(conn, NetworkPhase.LOGIN, listener);
+                     else if (state == ConfigurationStates.S2C) m.invoke(conn, NetworkPhase.CONFIGURATION, listener);
+                     else m.invoke(conn, NetworkPhase.PLAY, listener); // Default for play if state is unknown/null
                      return;
                  }
              }
@@ -164,7 +170,7 @@ public class FakeBot {
         @Override
         public void onSuccess(LoginSuccessS2CPacket packet) {
             BotConfigListener configListener = new BotConfigListener(connection, bot);
-            bot.setListener(connection, ConfigurationStates.C2S, configListener);
+            bot.setListener(connection, ConfigurationStates.S2C, configListener);
         }
 
         @Override public void onDisconnect(LoginDisconnectS2CPacket packet) { bot.connected = false; }
@@ -228,46 +234,13 @@ public class FakeBot {
                 }
              );
 
-             // PlayStates seems to be missing or named differently.
-             // We fallback to reflection using string ONLY for PlayStates because we can't import it.
-             // But wait, if it's missing, maybe it's `net.minecraft.network.state.PlayState`?
-             // Or maybe it is just using GameProfile?
-
-             // Let's try to get it via reflection properly this time, or just pass NetworkPhase.PLAY
-             // and hope the method logic handles it if I pass the Enum.
-             // My setListener logic handles NetworkPhase.
-
-             // Try to get PlayStates.C2S via reflection if possible to be safe.
+             // Try to get PlayStates via reflection since import failed
              Object playState = null;
              try {
-                 Class<?> cls = Class.forName("net.minecraft.network.state.PlayStateFactory$C2S"); // Guess
-                 // It's usually PlayStateFactory or something.
-
-                 // Let's just use NetworkPhase.PLAY and rely on the fallback logic I added in setListener.
-                 // But wait, the fallback logic uses `state` (which is PlayStates.C2S usually) to decide.
-                 // If I pass `NetworkPhase.PLAY`, it will work if I pass it as `state`?
-                 // No, `state` is type Object.
-                 // If I pass `NetworkPhase.PLAY` as `state`, my `setListener` logic:
-                 // if (m.getParameterTypes()[0] == NetworkPhase.class) { ... }
-                 // It will call invoke with NetworkPhase.PLAY.
-
-                 // If the method expects ProtocolInfo, passing NetworkPhase will throw IllegalArgumentException.
-
-                 // So I MUST find the ProtocolInfo object.
-                 // In 1.21, maybe `net.minecraft.network.state.PlayState` exists?
-                 // I will try to find class `net.minecraft.network.state.PlayState` via reflection and get `C2S`.
-
-                 Class<?> playStateClass = Class.forName("net.minecraft.network.state.PlayState");
-                 playState = playStateClass.getField("C2S").get(null);
-             } catch (Exception e) {
-                 // Try plural
-                 try {
-                     Class<?> playStateClass = Class.forName("net.minecraft.network.state.PlayStates");
-                     playState = playStateClass.getField("C2S").get(null);
-                 } catch (Exception ex) {
-                     // Try GameJoinS2CPacket?
-                 }
-             }
+                 Class<?> cls = Class.forName("net.minecraft.network.state.PlayStateFactory");
+                 // Or net.minecraft.network.state.PlayStates if it existed but wasn't exported?
+                 // But simply passing null will trigger the fallback to NetworkPhase.PLAY in setListener
+             } catch (Exception e) {}
 
              bot.setListener(connection, playState, playListener);
         }
