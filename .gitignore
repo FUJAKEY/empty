@@ -1,0 +1,17 @@
+.gradle/
+build/
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+bin/
+out/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+*.log
+run/
