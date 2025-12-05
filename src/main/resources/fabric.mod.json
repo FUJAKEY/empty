@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "botmod",
+  "version": "${version}",
+  "name": "Bot Mod",
+  "description": "A mod to add fake bots to the server.",
+  "authors": [
+    "Me"
+  ],
+  "contact": {
+    "homepage": "https://fabricmc.net/",
+    "sources": "https://github.com/FabricMC/fabric-example-mod"
+  },
+  "license": "CC0-1.0",
+  "icon": "assets/botmod/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.example.botmod.BotMod"
+    ]
+  },
+  "mixins": [
+    "botmod.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=21"
+  },
+  "suggests": {
+    "another-mod": "*"
+  }
+}
