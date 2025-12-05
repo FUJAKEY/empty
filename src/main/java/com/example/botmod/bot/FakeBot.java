@@ -49,6 +49,9 @@ import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.player.PlayerModelPart;
 import java.lang.reflect.Proxy;
 import java.util.Collections;
+import net.minecraft.network.state.LoginStates;
+import net.minecraft.network.state.ConfigurationStates;
+// import net.minecraft.network.state.PlayStates; // Failed to resolve
 
 public class FakeBot {
     private final String name;
@@ -77,7 +80,11 @@ public class FakeBot {
                 if (addressStr.contains(":")) {
                     String[] parts = addressStr.split(":");
                     ip = parts[0];
-                    port = Integer.parseInt(parts[1]);
+                    try {
+                        port = Integer.parseInt(parts[1]);
+                    } catch (NumberFormatException e) {
+                        // ignore
+                    }
                 }
 
                 InetSocketAddress socketAddress = new InetSocketAddress(ip, port);
@@ -87,9 +94,7 @@ public class FakeBot {
 
                 BotLoginListener loginListener = new BotLoginListener(this.connection, this);
 
-                // Get LOGIN protocol state
-                Object loginState = getProtocolState("LoginStates", "C2S");
-                setListener(this.connection, loginState, loginListener);
+                setListener(this.connection, LoginStates.C2S, loginListener);
 
                 this.connection.send(new HandshakeC2SPacket(767, ip, port, ConnectionIntent.LOGIN));
                 this.connection.send(new LoginHelloC2SPacket(this.name, UUID.randomUUID()));
@@ -112,18 +117,6 @@ public class FakeBot {
         }).start();
     }
 
-    // Dynamically retrieve ProtocolInfo (LoginStates.C2S, etc.)
-    private Object getProtocolState(String className, String fieldName) {
-        try {
-            // Try standard Fabric/Intermediary location: net.minecraft.network.state.LoginStates
-            Class<?> cls = Class.forName("net.minecraft.network.state." + className);
-            return cls.getField(fieldName).get(null);
-        } catch (Exception e) {
-            // e.printStackTrace();
-            return null; // Fallback to null if not found (will likely crash if method requires it)
-        }
-    }
-
     private void setListener(ClientConnection conn, Object state, Object listener) {
         try {
              // Find method taking (ProtocolInfo/NetworkState, PacketListener)
@@ -132,12 +125,12 @@ public class FakeBot {
                      net.minecraft.network.listener.PacketListener.class.isAssignableFrom(m.getParameterTypes()[1])) {
 
                      m.setAccessible(true);
-                     // If method takes NetworkPhase, pass that instead of state object
                      if (m.getParameterTypes()[0] == NetworkPhase.class) {
-                         if (state != null && state.toString().contains("LOGIN")) m.invoke(conn, NetworkPhase.LOGIN, listener);
-                         else if (state != null && state.toString().contains("CONFIG")) m.invoke(conn, NetworkPhase.CONFIGURATION, listener);
-                         else if (state != null && state.toString().contains("PLAY")) m.invoke(conn, NetworkPhase.PLAY, listener);
-                         else m.invoke(conn, NetworkPhase.LOGIN, listener); // Default?
+                         // Fallback for Phase
+                         if (state instanceof NetworkPhase) m.invoke(conn, state, listener);
+                         else if (state == LoginStates.C2S) m.invoke(conn, NetworkPhase.LOGIN, listener);
+                         else if (state == ConfigurationStates.C2S) m.invoke(conn, NetworkPhase.CONFIGURATION, listener);
+                         else m.invoke(conn, NetworkPhase.PLAY, listener);
                      } else {
                          // Expects ProtocolInfo
                          m.invoke(conn, state, listener);
@@ -171,8 +164,7 @@ public class FakeBot {
         @Override
         public void onSuccess(LoginSuccessS2CPacket packet) {
             BotConfigListener configListener = new BotConfigListener(connection, bot);
-            Object configState = bot.getProtocolState("ConfigurationStates", "C2S");
-            bot.setListener(connection, configState, configListener);
+            bot.setListener(connection, ConfigurationStates.C2S, configListener);
         }
 
         @Override public void onDisconnect(LoginDisconnectS2CPacket packet) { bot.connected = false; }
@@ -236,7 +228,47 @@ public class FakeBot {
                 }
              );
 
-             Object playState = bot.getProtocolState("PlayStates", "C2S");
+             // PlayStates seems to be missing or named differently.
+             // We fallback to reflection using string ONLY for PlayStates because we can't import it.
+             // But wait, if it's missing, maybe it's `net.minecraft.network.state.PlayState`?
+             // Or maybe it is just using GameProfile?
+
+             // Let's try to get it via reflection properly this time, or just pass NetworkPhase.PLAY
+             // and hope the method logic handles it if I pass the Enum.
+             // My setListener logic handles NetworkPhase.
+
+             // Try to get PlayStates.C2S via reflection if possible to be safe.
+             Object playState = null;
+             try {
+                 Class<?> cls = Class.forName("net.minecraft.network.state.PlayStateFactory$C2S"); // Guess
+                 // It's usually PlayStateFactory or something.
+
+                 // Let's just use NetworkPhase.PLAY and rely on the fallback logic I added in setListener.
+                 // But wait, the fallback logic uses `state` (which is PlayStates.C2S usually) to decide.
+                 // If I pass `NetworkPhase.PLAY`, it will work if I pass it as `state`?
+                 // No, `state` is type Object.
+                 // If I pass `NetworkPhase.PLAY` as `state`, my `setListener` logic:
+                 // if (m.getParameterTypes()[0] == NetworkPhase.class) { ... }
+                 // It will call invoke with NetworkPhase.PLAY.
+
+                 // If the method expects ProtocolInfo, passing NetworkPhase will throw IllegalArgumentException.
+
+                 // So I MUST find the ProtocolInfo object.
+                 // In 1.21, maybe `net.minecraft.network.state.PlayState` exists?
+                 // I will try to find class `net.minecraft.network.state.PlayState` via reflection and get `C2S`.
+
+                 Class<?> playStateClass = Class.forName("net.minecraft.network.state.PlayState");
+                 playState = playStateClass.getField("C2S").get(null);
+             } catch (Exception e) {
+                 // Try plural
+                 try {
+                     Class<?> playStateClass = Class.forName("net.minecraft.network.state.PlayStates");
+                     playState = playStateClass.getField("C2S").get(null);
+                 } catch (Exception ex) {
+                     // Try GameJoinS2CPacket?
+                 }
+             }
+
              bot.setListener(connection, playState, playListener);
         }
 

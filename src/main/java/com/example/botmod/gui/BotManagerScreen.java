@@ -16,6 +16,7 @@ public class BotManagerScreen extends Screen {
     private final Screen parent;
     private BotListWidget botList;
     private TextFieldWidget nameField;
+    private TextFieldWidget ipField;
     private ButtonWidget joinButton;
     private ButtonWidget deleteButton;
 
@@ -26,12 +27,17 @@ public class BotManagerScreen extends Screen {
 
     @Override
     protected void init() {
-        this.botList = new BotListWidget(this.client, this.width, this.height - 70, 40, 24);
+        this.botList = new BotListWidget(this.client, this.width, this.height - 90, 40, 24);
         this.addDrawableChild(this.botList);
 
-        this.nameField = new TextFieldWidget(this.textRenderer, this.width / 2 - 100, this.height - 60, 150, 20, Text.literal("Nickname"));
+        int midX = this.width / 2;
+
+        // Name Field
+        this.nameField = new TextFieldWidget(this.textRenderer, midX - 100, this.height - 85, 150, 20, Text.literal("Nickname"));
+        this.nameField.setPlaceholder(Text.literal("Nickname"));
         this.addDrawableChild(this.nameField);
 
+        // Add Button
         this.addDrawableChild(ButtonWidget.builder(Text.literal("Add"), button -> {
             String name = this.nameField.getText().trim();
             if (!name.isEmpty()) {
@@ -39,17 +45,35 @@ public class BotManagerScreen extends Screen {
                 this.botList.refresh();
                 this.nameField.setText("");
             }
-        }).dimensions(this.width / 2 + 60, this.height - 60, 40, 20).build());
+        }).dimensions(midX + 60, this.height - 85, 40, 20).build());
 
+        // IP Field
+        this.ipField = new TextFieldWidget(this.textRenderer, midX - 100, this.height - 60, 200, 20, Text.literal("Target IP"));
+        this.ipField.setPlaceholder(Text.literal("Target Server IP"));
+
+        // Default IP
+        if (this.client.getCurrentServerEntry() != null) {
+            this.ipField.setText(this.client.getCurrentServerEntry().address);
+        } else if (this.client.isInSingleplayer()) {
+            this.ipField.setText("localhost");
+        }
+
+        this.addDrawableChild(this.ipField);
+
+        // Join/Offline Button
         this.joinButton = this.addDrawableChild(ButtonWidget.builder(Text.literal("Join/Offline"), button -> {
             BotListWidget.BotEntry entry = this.botList.getSelectedOrNull();
             if (entry != null) {
-                entry.toggleConnection();
+                String targetIp = this.ipField.getText().trim();
+                if (targetIp.isEmpty()) targetIp = "localhost";
+
+                entry.toggleConnection(targetIp);
                 this.updateButtons();
             }
-        }).dimensions(this.width / 2 - 100, this.height - 30, 98, 20).build());
+        }).dimensions(midX - 100, this.height - 30, 98, 20).build());
         this.joinButton.active = false;
 
+        // Delete Button
         this.deleteButton = this.addDrawableChild(ButtonWidget.builder(Text.literal("Delete"), button -> {
             BotListWidget.BotEntry entry = this.botList.getSelectedOrNull();
             if (entry != null) {
@@ -57,7 +81,7 @@ public class BotManagerScreen extends Screen {
                 this.botList.refresh();
                 this.updateButtons();
             }
-        }).dimensions(this.width / 2 + 2, this.height - 30, 98, 20).build());
+        }).dimensions(midX + 2, this.height - 30, 98, 20).build());
         this.deleteButton.active = false;
 
         // Populate list
@@ -132,17 +156,11 @@ public class BotManagerScreen extends Screen {
                 return true;
             }
 
-            public void toggleConnection() {
+            public void toggleConnection(String ip) {
                 if (bot.isConnected()) {
                     bot.disconnect();
                 } else {
-                     // Get current server info
-                    if (MinecraftClient.getInstance().getCurrentServerEntry() != null) {
-                         bot.connect(MinecraftClient.getInstance().getCurrentServerEntry().address);
-                    } else if (MinecraftClient.getInstance().isInSingleplayer()) {
-                         // Integrated server usually typically on localhost
-                         bot.connect("localhost");
-                    }
+                     bot.connect(ip);
                 }
             }
         }
