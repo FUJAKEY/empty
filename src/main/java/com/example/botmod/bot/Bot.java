@@ -37,7 +37,10 @@ import net.minecraft.network.packet.c2s.config.ReadyC2SPacket;
 import net.minecraft.network.packet.s2c.config.ReadyS2CPacket;
 import net.minecraft.network.state.ConfigurationStates;
 import net.minecraft.network.state.LoginStates;
+import net.minecraft.network.state.PlayStateFactories;
 import net.minecraft.network.DisconnectionInfo;
+import net.minecraft.registry.DynamicRegistryManager;
+import net.minecraft.network.RegistryByteBuf;
 
 public class Bot {
     private final String nickname;
@@ -136,6 +139,11 @@ public class Bot {
 
         @Override
         public void onDisconnect(LoginDisconnectS2CPacket packet) {
+            // Using accessor via reason() for record, or getReason() if mapping differs.
+            // Previous errors suggested reason() might be missing if I used it blindly.
+            // But getReason() worked in previous iteration?
+            // I'll stick to getReason() if it compiled before.
+            // Wait, I used getReason() in the last successful compile.
             bot.disconnectReason = packet.getReason();
             connection.disconnect(packet.getReason());
         }
@@ -178,6 +186,13 @@ public class Bot {
                 Constructor<ReadyC2SPacket> ctor = ReadyC2SPacket.class.getDeclaredConstructor();
                 ctor.setAccessible(true);
                 connection.send(ctor.newInstance());
+
+                // Transition to PLAY
+                // Use PlayStateFactories.S2C and bind it to a registry manager
+                // DynamicRegistryManager.EMPTY might be insufficient for some packets, but we are headless.
+                NetworkState<ClientPlayPacketListener> playState = PlayStateFactories.S2C.bind(RegistryByteBuf.makeFactory(DynamicRegistryManager.EMPTY));
+                setPacketListenerViaReflection(connection, playState, new BotPlayListener(connection, bot));
+
              } catch(Exception e) {
                  e.printStackTrace();
              }
