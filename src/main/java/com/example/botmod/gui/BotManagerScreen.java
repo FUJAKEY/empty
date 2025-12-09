@@ -32,6 +32,9 @@ public class BotManagerScreen extends Screen {
         this.nicknameField.setMaxLength(16);
         this.addDrawableChild(this.nicknameField);
 
+        // Fix: Set initial focus to the text field so typing works immediately
+        this.setFocused(this.nicknameField);
+
         this.addDrawableChild(ButtonWidget.builder(Text.of("Add Bot"), button -> {
             String nick = nicknameField.getText();
             if (!nick.isEmpty()) {
@@ -80,6 +83,24 @@ public class BotManagerScreen extends Screen {
         }).dimensions(this.width / 2 - 50, this.height - 5, 100, 20).build());
 
         updateButtons();
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // Ensure text field handles key press if focused
+        if (this.nicknameField.keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char chr, int modifiers) {
+        // Ensure text field handles char typing
+        if (this.nicknameField.charTyped(chr, modifiers)) {
+            return true;
+        }
+        return super.charTyped(chr, modifiers);
     }
 
     @Override
