@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "bot-mod",
+  "version": "${version}",
+  "name": "Bot Mod",
+  "description": "A mod to add bots to the server.",
+  "authors": [
+    "Me"
+  ],
+  "contact": {
+    "homepage": "https://fabricmc.net/",
+    "sources": "https://github.com/FabricMC/fabric-example-mod"
+  },
+  "license": "CC0-1.0",
+  "icon": "assets/bot-mod/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.example.botmod.BotMod"
+    ],
+    "client": [
+      "com.example.botmod.client.BotModClient"
+    ]
+  },
+  "mixins": [
+    "bot-mod.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.15.11",
+    "minecraft": ">=1.21.1",
+    "java": ">=21"
+  },
+  "suggests": {
+    "another-mod": "*"
+  }
+}

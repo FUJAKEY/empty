@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "com.example.botmod.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+  ],
+  "client": [
+      "GameMenuScreenMixin",
+      "MinecraftClientMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
