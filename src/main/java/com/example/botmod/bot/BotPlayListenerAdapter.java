@@ -41,6 +41,7 @@ public class BotPlayListenerAdapter implements ClientPlayPacketListener {
     @Override public void onPingResult(PingResultS2CPacket packet) {}
     @Override public void onServerTransfer(ServerTransferS2CPacket packet) {}
     @Override public void onCustomReportDetails(CustomReportDetailsS2CPacket packet) {}
+    @Override public void onSynchronizeTags(SynchronizeTagsS2CPacket packet) {}
 
     // Play Packets
     @Override public void onEntitySpawn(EntitySpawnS2CPacket p) {}
@@ -134,5 +135,4 @@ public class BotPlayListenerAdapter implements ClientPlayPacketListener {
     @Override public void onChatSuggestions(ChatSuggestionsS2CPacket p) {}
     @Override public void onChunkBiomeData(ChunkBiomeDataS2CPacket p) {}
     @Override public void onStartChunkSend(StartChunkSendS2CPacket p) {}
-    @Override public void onSynchronizeTags(SynchronizeTagsS2CPacket p) {}
 }

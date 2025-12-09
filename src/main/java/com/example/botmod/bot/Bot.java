@@ -41,6 +41,7 @@ import net.minecraft.network.state.PlayStateFactories;
 import net.minecraft.network.DisconnectionInfo;
 import net.minecraft.registry.DynamicRegistryManager;
 import net.minecraft.network.RegistryByteBuf;
+import net.minecraft.client.MinecraftClient;
 
 public class Bot {
     private final String nickname;
@@ -139,11 +140,6 @@ public class Bot {
 
         @Override
         public void onDisconnect(LoginDisconnectS2CPacket packet) {
-            // Using accessor via reason() for record, or getReason() if mapping differs.
-            // Previous errors suggested reason() might be missing if I used it blindly.
-            // But getReason() worked in previous iteration?
-            // I'll stick to getReason() if it compiled before.
-            // Wait, I used getReason() in the last successful compile.
             bot.disconnectReason = packet.getReason();
             connection.disconnect(packet.getReason());
         }
@@ -187,10 +183,13 @@ public class Bot {
                 ctor.setAccessible(true);
                 connection.send(ctor.newInstance());
 
-                // Transition to PLAY
-                // Use PlayStateFactories.S2C and bind it to a registry manager
-                // DynamicRegistryManager.EMPTY might be insufficient for some packets, but we are headless.
-                NetworkState<ClientPlayPacketListener> playState = PlayStateFactories.S2C.bind(RegistryByteBuf.makeFactory(DynamicRegistryManager.EMPTY));
+                // Use client's registry manager if available for robust packet decoding
+                DynamicRegistryManager registryManager = DynamicRegistryManager.EMPTY;
+                if (MinecraftClient.getInstance().getNetworkHandler() != null) {
+                    registryManager = MinecraftClient.getInstance().getNetworkHandler().getRegistryManager();
+                }
+
+                NetworkState<ClientPlayPacketListener> playState = PlayStateFactories.S2C.bind(RegistryByteBuf.makeFactory(registryManager));
                 setPacketListenerViaReflection(connection, playState, new BotPlayListener(connection, bot));
 
              } catch(Exception e) {
