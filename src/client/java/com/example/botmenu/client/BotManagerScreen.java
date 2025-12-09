@@ -127,7 +127,7 @@ public class BotManagerScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        this.renderBackground(context);
+        this.renderBackground(context, mouseX, mouseY, delta);
         context.drawCenteredTextWithShadow(textRenderer, Text.literal("Bot Manager"), this.width / 2, 15, 0xFFFFFF);
         super.render(context, mouseX, mouseY, delta);
     }

@@ -1,7 +1,7 @@
 {
   "required": true,
   "package": "com.example.botmenu.mixin",
-  "compatibilityLevel": "JAVA_17",
+  "compatibilityLevel": "JAVA_21",
   "client": [
     "GameMenuMixin"
   ],
